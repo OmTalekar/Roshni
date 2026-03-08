@@ -68,6 +68,8 @@ async def submit_demand(data: DemandSubmit, db: Session = Depends(get_db)):
         grid_required_kwh=result["grid_kwh"],
         ai_reasoning=result["ai_reasoning"],
         estimated_cost_inr=result["estimated_pool_cost_inr"] + result["estimated_grid_cost_inr"],
+        sun_tokens_minted=result.get("sun_tokens_minted", 0),
+        blockchain_tx=result.get("blockchain_tx"),
     )
 
 

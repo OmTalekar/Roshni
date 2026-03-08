@@ -93,16 +93,27 @@ class PoolEngine:
         total_demand = sum(d.demand_kwh for d in pending_demand)
         grid_drawdown = max(0, total_demand - total_supply)
 
+        # Count today's fulfilled trades for dashboard display
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
+        fulfilled_today = self.db.query(DemandRecord).join(House).filter(
+            House.feeder_id == feeder_id,
+            DemandRecord.status.in_(["fulfilled", "partial"]),
+            DemandRecord.created_at >= today_start,
+        ).all()
+        today_fulfilled_kwh = sum(d.demand_kwh for d in fulfilled_today)
+
         result = {
             "current_supply_kwh": total_supply,
             "current_demand_kwh": total_demand,
+            "today_fulfilled_kwh": today_fulfilled_kwh,
+            "today_trade_count": len(fulfilled_today),
             "grid_drawdown": grid_drawdown,
             "surplus": max(0, total_supply - total_demand),
             "shortage": grid_drawdown,
             "active_generators": active_generators,
             "timestamp": datetime.utcnow(),
         }
-        logger.info(f"Pool state for feeder {feeder_id}: Supply={total_supply:.2f}, Allocated={allocated_supply:.2f}, Demand={total_demand:.2f}")
+        logger.info(f"Pool state for feeder {feeder_id}: Supply={total_supply:.2f}, Demand={total_demand:.2f}, Traded={today_fulfilled_kwh:.2f}")
         return result
 
     def _get_realtime_iot_generation(self, house_id: str) -> float:
@@ -134,8 +145,8 @@ class PoolEngine:
         if not pool_state:
             pool_state = PoolState(feeder_id=feeder_id)
 
-        pool_state.current_supply_kwh = state_data["total_supply"]
-        pool_state.current_demand_kwh = state_data["total_demand"]
+        pool_state.current_supply_kwh = state_data["current_supply_kwh"]
+        pool_state.current_demand_kwh = state_data["current_demand_kwh"]
         pool_state.grid_drawdown = state_data["grid_drawdown"]
         pool_state.timestamp = datetime.utcnow()
 
@@ -145,8 +156,8 @@ class PoolEngine:
 
         logger.debug(
             f"Pool state updated: "
-            f"Supply={state_data['total_supply']:.2f}kWh, "
-            f"Demand={state_data['total_demand']:.2f}kWh, "
+            f"Supply={state_data['current_supply_kwh']:.2f}kWh, "
+            f"Demand={state_data['current_demand_kwh']:.2f}kWh, "
             f"GridDrawdown={state_data['grid_drawdown']:.2f}kWh"
         )
 
