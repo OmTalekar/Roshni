@@ -4,9 +4,12 @@ Blockchain endpoints for SUN ASA and bill hash operations.
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime  # ✅ Fix: was at bottom of file, used before import
 import logging
+from sqlalchemy.orm import Session
 
 from app.schemas import ASATransferRequest, BillHashSubmit, BillHashResponse
 from app.services.blockchain_service import BlockchainService
+from app.database import get_db
+from app.models import House
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -40,19 +43,30 @@ async def create_sun_asa():
 
 
 @router.post("/sun-asa/transfer")
-async def transfer_sun_asa(data: ASATransferRequest):
+async def transfer_sun_asa(data: ASATransferRequest, db: Session = Depends(get_db)):
     """
     Transfer SUN ASA tokens to a house.
     Represents renewable allocation certificate.
     """
     try:
+        # Get house from database
+        house = db.query(House).filter(House.house_id == data.house_id).first()
+        if not house:
+            raise HTTPException(status_code=404, detail="House not found")
+        if not house.algorand_address:
+            raise HTTPException(status_code=400, detail="House has no Algorand wallet")
+        if not house.opt_in_sun_asa:
+            raise HTTPException(status_code=400, detail="House not opted into SUN ASA")
+
         result = blockchain_service.transfer_sun_asa(
-            recipient_address=data.house_id,
-            amount_kWh=data.amount,
+            recipient_address=house.algorand_address,
+            amount_kwh=data.amount,
             reason=data.reason,
         )
-        logger.info(f"SUN ASA transfer: {data.amount:.2f} to {data.house_id}")
+        logger.info(f"SUN ASA transfer: {data.amount:.2f} to {data.house_id} ({house.algorand_address[:10]}...)")
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"SUN ASA transfer error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

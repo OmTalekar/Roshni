@@ -16,13 +16,22 @@ export default function SellerDashboard({ houseId }) {
 
   useEffect(() => {
     fetchDashboard()
-    fetchIoTData()
     const interval = setInterval(() => {
       fetchDashboard()
-      fetchIoTData()
     }, 5000)
     return () => clearInterval(interval)
   }, [houseId])
+
+  useEffect(() => {
+    // Only fetch IoT data if this is actually a prosumer/seller house
+    if (dashboard && (dashboard.prosumer_type === 'prosumer' || dashboard.prosumer_type === 'seller')) {
+      fetchIoTData()
+      const interval = setInterval(() => {
+        fetchIoTData()
+      }, 5000)
+      return () => clearInterval(interval)
+    }
+  }, [houseId, dashboard?.prosumer_type])
 
   const fetchDashboard = async () => {
     try {
@@ -61,12 +70,30 @@ export default function SellerDashboard({ houseId }) {
   if (error) return <div className="alert danger">Error: {error}</div>
   if (!dashboard) return <div className="alert info">No data available</div>
 
+  // Check if this is actually a consumer house
+  if (dashboard.prosumer_type === 'consumer' || dashboard.prosumer_type === 'buyer') {
+    return (
+      <div>
+        <h1>⚠️ Wrong Dashboard</h1>
+        <div className="alert info" style={{ marginTop: '1rem' }}>
+          <p><strong>{dashboard.house_id}</strong> is a <strong>Consumer/Buyer</strong> house.</p>
+          <p>Please switch to the <strong>Buyer Dashboard</strong> to manage energy demand.</p>
+          <p>ℹ️ The Seller Dashboard is for prosumers and generators only.</p>
+        </div>
+      </div>
+    )
+  }
+
   // Use real IoT data for live metrics
   const currentGeneration = iotData?.generation_kwh || 0
   const cumulativeGeneration = iotData?.cumulative_kwh || 0
   const supply = cumulativeGeneration  // Total pool energy accumulated
-  const demand = dashboard.live_pool_state?.current_demand_kwh || 0
-  const poolUtilPct = supply > 0 ? Math.min(100, (demand / supply) * 100) : 0
+  const pendingDemand = dashboard.live_pool_state?.current_demand_kwh || 0
+  const todayFulfilled = dashboard.live_pool_state?.today_fulfilled_kwh || 0
+  const todayTrades = dashboard.live_pool_state?.today_trade_count || 0
+  // Show fulfilled demand if no pending — gives a live sense of activity
+  const demand = pendingDemand > 0 ? pendingDemand : todayFulfilled
+  const poolUtilPct = supply > 0 ? Math.min(100, (todayFulfilled / supply) * 100) : 0
 
   // Calculate earnings based on cumulative generation
   const earningsEstimate = cumulativeGeneration * 9  // ₹9/kWh for total accumulated
@@ -96,9 +123,9 @@ export default function SellerDashboard({ houseId }) {
           <div style={{ fontSize: '0.85rem' }}>kW (Live)</div>
         </div>
         <div className="metric-box info">
-          <div className="metric-label">Pool Demand</div>
+          <div className="metric-label">{pendingDemand > 0 ? 'Pending Demand' : 'Traded Today'}</div>
           <div className="metric-value">{demand.toFixed(2)}</div>
-          <div style={{ fontSize: '0.85rem' }}>kWh</div>
+          <div style={{ fontSize: '0.85rem' }}>{pendingDemand > 0 ? 'kWh (awaiting)' : `kWh (${todayTrades} trades)`}</div>
         </div>
         <div className="metric-box">
           <div className="metric-label">Total Earnings</div>
@@ -112,18 +139,25 @@ export default function SellerDashboard({ houseId }) {
 
       {/* Live Pool Status */}
       <div className="card" style={{ marginTop: '1.5rem' }}>
-        <h3>🎯 Live Pool Status</h3>
+        <h3>Live Pool Status</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
           <div>
-            <div style={{ opacity: 0.7, fontSize: '0.9rem' }}>Total Pool Energy</div>
+            <div style={{ opacity: 0.7, fontSize: '0.9rem' }}>Live Supply</div>
             <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#27ae60' }}>
               {supply.toFixed(2)} kWh
             </div>
           </div>
           <div>
-            <div style={{ opacity: 0.7, fontSize: '0.9rem' }}>Demand</div>
+            <div style={{ opacity: 0.7, fontSize: '0.9rem' }}>Traded Today</div>
             <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#3498db' }}>
-              {demand.toFixed(2)} kWh
+              {todayFulfilled.toFixed(2)} kWh
+            </div>
+            <div style={{ fontSize: '0.78rem', opacity: 0.6 }}>{todayTrades} trades completed</div>
+          </div>
+          <div>
+            <div style={{ opacity: 0.7, fontSize: '0.9rem' }}>Pending</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: pendingDemand > 0 ? '#f39c12' : '#888' }}>
+              {pendingDemand.toFixed(2)} kWh
             </div>
           </div>
           <div>
@@ -136,7 +170,7 @@ export default function SellerDashboard({ houseId }) {
         {/* Pool fill bar */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.3rem', opacity: 0.7 }}>
-            <span>Pool Utilization</span>
+            <span>Pool Utilization (Traded / Cumulative)</span>
             <span>{poolUtilPct.toFixed(0)}%</span>
           </div>
           <div style={{ height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', overflow: 'hidden' }}>

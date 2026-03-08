@@ -12,6 +12,7 @@ export default function BuyerDashboard({ houseId }) {
   const [estimatedCost, setEstimatedCost] = useState(0)
   const [voiceEnabled] = useState(localStorage.getItem('voiceEnabled') !== 'false')
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [walletRefreshKey, setWalletRefreshKey] = useState(0)
 
   const handleDemandChange = (e) => {
     const val = parseFloat(e.target.value) || 0
@@ -32,6 +33,13 @@ export default function BuyerDashboard({ houseId }) {
         duration_hours: parseFloat(duration),
       })
       setResponse(res.data)
+
+      // If SUN tokens were minted, refresh wallet balance after a short delay
+      // (give blockchain time to confirm the transaction)
+      if (res.data.sun_tokens_minted > 0) {
+        setTimeout(() => setWalletRefreshKey(k => k + 1), 3000)
+        setTimeout(() => setWalletRefreshKey(k => k + 1), 8000)
+      }
 
       if (voiceEnabled && res.data.allocation_status === 'matched') {
         setIsSpeaking(true)
@@ -167,13 +175,39 @@ export default function BuyerDashboard({ houseId }) {
               color: '#27ae60',
               fontWeight: 'bold',
             }}>
-              🎉 100% renewable! Saved ₹{((response.allocated_kwh) * (12 - 9)).toFixed(2)} vs grid rate.
+              100% renewable! Saved {((response.allocated_kwh) * (12 - 9)).toFixed(2)} vs grid rate.
+            </div>
+          )}
+
+          {/* SUN Tokens minted banner */}
+          {response.sun_tokens_minted > 0 && (
+            <div style={{
+              marginTop: '1rem',
+              padding: '1rem 1.25rem',
+              background: 'rgba(255, 193, 7, 0.12)',
+              borderRadius: '8px',
+              border: '1px solid rgba(255, 193, 7, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>☀️</span>
+              <div>
+                <div style={{ fontWeight: 'bold', color: '#f39c12' }}>
+                  {response.sun_tokens_minted.toFixed(2)} SUN Tokens Minted!
+                </div>
+                <div style={{ fontSize: '0.82rem', opacity: 0.8, marginTop: '0.2rem' }}>
+                  {response.blockchain_tx
+                    ? `TX: ${response.blockchain_tx.slice(0, 16)}... — Balance updating below`
+                    : 'Syncing with blockchain...'}
+                </div>
+              </div>
             </div>
           )}
         </div>
       )}
 
-      <WalletDisplay houseId={houseId} />
+      <WalletDisplay houseId={houseId} refreshTrigger={walletRefreshKey} />
 
       {/* ── Demo Simulator for buyer houses ── */}
 

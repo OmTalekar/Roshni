@@ -104,6 +104,19 @@ async def initialize_house_wallet(house_id: str, db: Session = Depends(get_db)):
         logger.warning(f"Wallet funding skipped for {house_id}: {fund_result.get('message')}")
         # Continue anyway with warning - user will need to fund manually
 
+    # Opt-in to SUN ASA
+    opt_in_result = wallet_service.opt_in_to_sun_asa(
+        algorand_address=wallet_result["algorand_address"],
+        algorand_private_key=wallet_result["algorand_private_key"],
+    )
+
+    if opt_in_result.get("status") == "success":
+        house.opt_in_sun_asa = True
+        logger.info(f"Auto-opted into SUN ASA for {house_id}")
+    else:
+        logger.warning(f"SUN ASA opt-in failed for {house_id}: {opt_in_result.get('message')}")
+        # Continue anyway - user can opt-in manually later
+
     # Store in database
     house.algorand_address = wallet_result["algorand_address"]
     house.algorand_private_key = wallet_result["algorand_private_key"]
@@ -119,9 +132,9 @@ async def initialize_house_wallet(house_id: str, db: Session = Depends(get_db)):
         "status": "success",
         "house_id": house.house_id,
         "algorand_address": house.algorand_address,
-        "opt_in_sun_asa": False,
+        "opt_in_sun_asa": house.opt_in_sun_asa,
         "explorer_url": wallet_service.get_explorer_url(house.algorand_address),
-        "message": "✅ Wallet created and funded! You can now opt into SUN ASA to receive renewable energy tokens.",
+        "message": "✅ Wallet created, funded, and opted into SUN ASA! Ready to receive renewable energy tokens.",
     }
 
 

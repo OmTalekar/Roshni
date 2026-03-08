@@ -19,7 +19,7 @@ const char* ssid = "test";
 const char* password = "9876543210";
 
 // -------- BACKEND URL --------
-const char* backendUrl = "http://10.206.44.21:8000/api/iot/update";
+const char* backendUrl = "http://localhost:8000/api/iot/update";
 
 // -------- AUTH --------
 const char* auth_token = "iot_secret_token_12345";

@@ -95,7 +95,7 @@ class BlockchainService:
                 sender=self.admin_public_key,
                 sp=params,
                 receiver=recipient_address,
-                amt=int(amount_kwh),
+                amt=int(round(amount_kwh)),  # Round to nearest whole token
                 index=self.sun_asa_id,
             )
             signed_txn = txn.sign(self.admin_private_key)
